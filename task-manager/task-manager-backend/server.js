@@ -1,49 +1,60 @@
 const express = require("express");
 const cors = require("cors");
+const db = require("./db");
+const { json } = require("body-parser");
 
 const app = express();
 app.use(cors());
-app.use(express.json())
+app.use(express.json());
 
-// Temporary database (in-memory)
-let tasks = [
-  {id: 1, title: "Learn Node.js", completed: false},
-  {id: 2, title: "Build a full-stack app", completed: false},
-]
-
-app.get("/tasks", (req, res)=>{
-  res.json(tasks);
-})
-
-app.get("/tasks/:id", (req, res)=>{
-  const {id} = req.params;
-  const index = tasks.findIndex((task)=> task.id == id)
-  if (index != -1) {
-    res.json(tasks[index])
-  } else {
-    res.status(404).json({error: "Task not found"})
+app.get("/tasks", async (req, res) => {
+  try {
+    const result = await db.query("SELECT * FROM tasks ORDER BY id ASC");
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Database error" });
   }
-})
-app.post("/tasks", (req, res)=>{
-  const newTask = {id: tasks.length + 1, ...req.body};
-  tasks.push(newTask)
-  res.json(newTask)
-})
+});
 
-app.put('/tasks/:id', (req, res)=>{
-  const {id} = req.params;
-  const index = tasks.findIndex((task)=> task.id == id);
-  if(index !=-1){
-    tasks[index] = {...tasks[index], ...req.body};
-    res.json(tasks[index])
-  } else{
-    res.status(404).json({error: "Task not found"})
+app.get("/tasks/:id", (req, res) => {});
+app.post("/tasks", async (req, res) => {
+  try {
+    const { title } = req.body;
+    const result = await db.query(
+      "INSERT INTO tasks (title) VALUES ($1) RETURNING *",
+      [title]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({error: "Database error"})
   }
-})
+});
 
-app.delete("/tasks/:id", (req, res)=>{
-  tasks= tasks.filter((task)=> task.id != req.params.id);
-  res.json({message: "Task deleted"})
-})
+app.put("/tasks/:id", async (req, res) => {
+  try {
+    const {id} = req.params;
+    const { completed } = req.body;
+    const result = await db.query("UPDATE tasks SET completed = $1 WHERE id = $2 RETURNING *",
+      [completed, id]
+    );
+    res.json(result.rows[0])
+    
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({error: "Database error"})
+  }
+});
 
-app.listen(5000, ()=> console.log("Server running on port 5000"));
+app.delete("/tasks/:id", async(req, res) => {
+  try {
+    await db.query("DELETE FROM tasks WHERE id = $1", [req.params.id])
+    res.json({message: "Task deleted"})
+  } catch (err) {
+    console.error(err)
+    res.status(500).json({error: "Database error"})
+  }
+});
+
+app.listen(5000, () => console.log("Server running on port 5000"));
